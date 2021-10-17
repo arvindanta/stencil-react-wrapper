@@ -7,6 +7,7 @@ import type {
   Config,
   OutputTargetDist,
 } from '@stencil/core/internal';
+import fs from 'fs';
 
 export async function reactProxyOutput(
   config: Config,
@@ -43,8 +44,7 @@ export function generateProxies(
 
   const imports = `/* eslint-disable */
 /* tslint:disable */
-/* auto-generated react proxies */
-import { createReactComponent } from './react-component-lib';\n`;
+/* auto-generated react proxies */\n`;
 
   /**
    * Generate JSX import type from correct location.
@@ -61,7 +61,10 @@ import { createReactComponent } from './react-component-lib';\n`;
     return `import type { ${IMPORT_TYPES} } from '${normalizePath(componentsTypeFile)}';\n`;
   }
 
-  const typeImports = generateTypeImports();
+  let typeImports = generateTypeImports();
+
+  let reactLibImport = `import { createReactComponent } from './react-component-lib';\n`;
+
 
   let sourceImports = '';
   let registerCustomElements = '';
@@ -73,15 +76,19 @@ import { createReactComponent } from './react-component-lib';\n`;
    * IonButton React Component that takes in the Web Component as a parameter.
    */
   if (outputTarget.includeImportCustomElements && outputTarget.componentCorePackage !== undefined) {
-    const cmpImports = components.map(component => {
-      const pascalImport = dashToPascalCase(component.tagName);
+    
+    reactLibImport = '';
+    typeImports = '';
 
-      return `import { ${pascalImport} as ${pascalImport}Cmp, defineCustomElement as defineCustomElement${pascalImport} } from '${normalizePath(outputTarget.componentCorePackage!)}/${outputTarget.customElementsDir ||
-        'components'
-      }/${component.tagName}.js';`;
-    });
+    // const cmpImports = components.map(component => {
+    //   const pascalImport = dashToPascalCase(component.tagName);
 
-    sourceImports = cmpImports.join('\n');
+    //   return `import { ${pascalImport} as ${pascalImport}Cmp, defineCustomElement as defineCustomElement${pascalImport} } from '${normalizePath(outputTarget.componentCorePackage!)}/${outputTarget.customElementsDir ||
+    //     'components'
+    //   }/${component.tagName}.js';`;
+    // });
+
+    // sourceImports = cmpImports.join('\n');
 
   } else if (outputTarget.includePolyfills && outputTarget.includeDefineCustomElements) {
     sourceImports = `import { ${APPLY_POLYFILLS}, ${REGISTER_CUSTOM_ELEMENTS} } from '${pathToCorePackageLoader}';\n`;
@@ -91,16 +98,27 @@ import { createReactComponent } from './react-component-lib';\n`;
     registerCustomElements = `${REGISTER_CUSTOM_ELEMENTS}();`;
   }
 
+
+  let customExports = `export { `;
+  customExports += components.map(cmpMeta => {
+    const tagNameAsPascal = dashToPascalCase(cmpMeta.tagName);
+    return tagNameAsPascal;
+  }).join(", ");
+  customExports+= ` } `;
+
   const final: string[] = [
     imports,
+    reactLibImport,
     typeImports,
     sourceImports,
     registerCustomElements,
-    components.map(cmpMeta => createComponentDefinition(cmpMeta, outputTarget.includeImportCustomElements)).join('\n'),
+    components.map(cmpMeta => createComponentDefinition(cmpMeta, outputTarget.includeImportCustomElements,outputTarget,generateTypeImports())).join('\n'),
+    customExports,
   ];
 
   return final.join('\n') + '\n';
 }
+
 
 /**
  * Defines the React component that developers will import
@@ -112,16 +130,38 @@ import { createReactComponent } from './react-component-lib';\n`;
  * @returns An array where each entry is a string version
  * of the React component definition.
  */
-export function createComponentDefinition(cmpMeta: ComponentCompilerMeta, includeCustomElement: boolean = false): string[] {
+export function createComponentDefinition(cmpMeta: ComponentCompilerMeta, includeCustomElement: boolean = false, outputTarget: OutputTargetReact, typeImports: String): string[] {
   const tagNameAsPascal = dashToPascalCase(cmpMeta.tagName);
-  let template = `export const ${tagNameAsPascal} = /*@__PURE__*/createReactComponent<${IMPORT_TYPES}.${tagNameAsPascal}, HTML${tagNameAsPascal}Element>('${cmpMeta.tagName}'`;
+  let template = '';
 
+  if(!includeCustomElement){
+    template = `export const ${tagNameAsPascal} = /*@__PURE__*/createReactComponent<${IMPORT_TYPES}.${tagNameAsPascal}, HTML${tagNameAsPascal}Element>('${cmpMeta.tagName}'`;
+    template += `);`;
+  }
+  
   if (includeCustomElement) {
+    template = `// @ts-nocheck
+    /* eslint-disable */
+/* tslint:disable */
+/* auto-generated react proxies */
+import { createReactComponent } from './react-component-lib';\n
+    ${typeImports}
+`;
+
+    template += `import { ${tagNameAsPascal} as ${tagNameAsPascal}Cmp, defineCustomElement as defineCustomElement${tagNameAsPascal} } from '${normalizePath(outputTarget.componentCorePackage!)}/${outputTarget.customElementsDir ||
+      'components'
+    }/${cmpMeta.tagName}.js';\n`;
+
+    template += `export const ${tagNameAsPascal} = /*@__PURE__*/createReactComponent<${IMPORT_TYPES}.${tagNameAsPascal}, HTML${tagNameAsPascal}Element>('${cmpMeta.tagName}'`;
     template += `, undefined, undefined, ${tagNameAsPascal}Cmp, defineCustomElement${tagNameAsPascal}`;
+    template += `);`;
+
+    fs.writeFileSync(path.join(path.dirname(outputTarget.proxiesFile), `${tagNameAsPascal}.ts`), template);
+
+    template = `import { ${tagNameAsPascal} } from './${tagNameAsPascal}'`
   }
 
-  template += `);`;
-
+  
   return [
     template
   ];
