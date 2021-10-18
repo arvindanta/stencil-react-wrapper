@@ -99,12 +99,16 @@ export function generateProxies(
   }
 
 
-  let customExports = `export { `;
-  customExports += components.map(cmpMeta => {
-    const tagNameAsPascal = dashToPascalCase(cmpMeta.tagName);
-    return tagNameAsPascal;
-  }).join(", ");
-  customExports+= ` } `;
+  let customExports = '';
+  
+  if (outputTarget.includeImportCustomElements && outputTarget.componentCorePackage !== undefined) {
+    customExports = `export { `;
+    customExports += components.map(cmpMeta => {
+      const tagNameAsPascal = dashToPascalCase(cmpMeta.tagName);
+      return tagNameAsPascal;
+    }).join(", ");
+    customExports += ` } `;
+  }
 
   const final: string[] = [
     imports,
