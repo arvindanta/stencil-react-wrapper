@@ -114,7 +114,7 @@ export function generateProxies(
     registerCustomElements,
     components.map(cmpMeta => createComponentDefinition(cmpMeta, outputTarget.includeImportCustomElements,outputTarget,generateTypeImports())).join('\n'),
     customExports,
-  ];
+  ].filter(Boolean);
 
   return final.join('\n') + '\n';
 }
@@ -141,11 +141,11 @@ export function createComponentDefinition(cmpMeta: ComponentCompilerMeta, includ
   
   if (includeCustomElement) {
     template = `// @ts-nocheck
-    /* eslint-disable */
+/* eslint-disable */
 /* tslint:disable */
 /* auto-generated react proxies */
 import { createReactComponent } from './react-component-lib';\n
-    ${typeImports}
+${typeImports}
 `;
 
     template += `import { ${tagNameAsPascal} as ${tagNameAsPascal}Cmp, defineCustomElement as defineCustomElement${tagNameAsPascal} } from '${normalizePath(outputTarget.componentCorePackage!)}/${outputTarget.customElementsDir ||
@@ -154,7 +154,7 @@ import { createReactComponent } from './react-component-lib';\n
 
     template += `export const ${tagNameAsPascal} = /*@__PURE__*/createReactComponent<${IMPORT_TYPES}.${tagNameAsPascal}, HTML${tagNameAsPascal}Element>('${cmpMeta.tagName}'`;
     template += `, undefined, undefined, ${tagNameAsPascal}Cmp, defineCustomElement${tagNameAsPascal}`;
-    template += `);`;
+    template += `);\n`;
 
     fs.writeFileSync(path.join(path.dirname(outputTarget.proxiesFile), `${tagNameAsPascal}.ts`), template);
 
